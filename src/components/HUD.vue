@@ -5,6 +5,10 @@
         <span class="label">分数</span>
         <span class="value">{{ gameStore.score }}</span>
       </div>
+      <div v-if="gameStore.isAdventure" class="bonus-display">
+        <span class="label">奖励分</span>
+        <span class="bonus-value">{{ gameStore.bonusScore }}</span>
+      </div>
       <div v-if="gameStore.combo >= 3" class="combo-badge">
         <span class="combo-num">{{ gameStore.combo }}</span>
         <span class="combo-label">连击</span>
@@ -18,6 +22,15 @@
       <div class="level-display">
         <span class="label">关卡</span>
         <span class="value">{{ gameStore.level }}</span>
+      </div>
+      <div v-if="gameStore.isAdventure" class="timer-display" :class="{ urgent: isTimeUrgent }">
+        <span class="label">剩余时间</span>
+        <span class="value">{{ formatSeconds(gameStore.adventureTimeRemaining) }}</span>
+      </div>
+      <div v-if="gameStore.isAdventure && gameStore.activeEffect !== 'none'" class="effect-badge" :class="gameStore.activeEffect">
+        <span class="effect-icon">{{ effectIcon }}</span>
+        <span class="effect-text">{{ effectText }}</span>
+        <span class="effect-time">{{ formatSeconds(gameStore.effectTimeRemaining) }}</span>
       </div>
     </div>
 
@@ -40,9 +53,20 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useGameStore } from '../stores/game'
 
 const gameStore = useGameStore()
+
+// 剩余时间不足 15 秒时高亮告警
+const isTimeUrgent = computed(() => gameStore.adventureTimeRemaining <= 15000)
+
+const effectIcon = computed(() => (gameStore.activeEffect === 'slow' ? '🍄' : '🍌'))
+const effectText = computed(() => (gameStore.activeEffect === 'slow' ? '减速中' : '翻倍中'))
+
+function formatSeconds(ms: number): string {
+  return `${Math.ceil(ms / 1000)}s`
+}
 </script>
 
 <style scoped>
@@ -82,6 +106,84 @@ const gameStore = useGameStore()
   padding: 10px 16px;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.bonus-display {
+  background: linear-gradient(135deg, #FF6B35, #F7B733);
+  padding: 8px 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(247, 147, 51, 0.35);
+}
+
+.bonus-value {
+  display: block;
+  font-size: 22px;
+  font-weight: bold;
+  color: #fff;
+}
+
+.timer-display {
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.timer-display.urgent {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  animation: timerPulse 0.8s ease-in-out infinite;
+}
+
+.timer-display.urgent .label,
+.timer-display.urgent .value {
+  color: #fff;
+}
+
+.effect-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.effect-badge.slow {
+  background: linear-gradient(135deg, #5DADE2, #2E86C1);
+}
+
+.effect-badge.lightning {
+  background: linear-gradient(135deg, #F4D03F, #F39C12);
+}
+
+.effect-icon {
+  font-size: 18px;
+}
+
+.effect-text {
+  font-size: 14px;
+  font-weight: bold;
+  color: #fff;
+}
+
+.effect-time {
+  font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+@keyframes timerPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
 }
 
 .label {

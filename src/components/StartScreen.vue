@@ -53,20 +53,45 @@
         <p>💡 连续接住水果可触发连击加分！</p>
       </div>
 
-      <button class="start-btn" @click="startGame">
-        开始游戏
-      </button>
+      <div class="adventure-legend">
+        <h3>🗺️ 限时冒险道具</h3>
+        <div class="legend-grid">
+          <div class="legend-item">
+            <span class="emoji">🎁</span>
+            <span class="score">+5秒</span>
+          </div>
+          <div class="legend-item">
+            <span class="emoji">🍄</span>
+            <span class="score">减速8秒</span>
+          </div>
+          <div class="legend-item">
+            <span class="emoji">🍌</span>
+            <span class="score">分值翻倍</span>
+          </div>
+        </div>
+        <p class="adventure-hint">90秒限时，结算额外计算冒险积分</p>
+      </div>
+
+      <div class="mode-buttons">
+        <button class="start-btn classic" @click="startGame('classic')">
+          🍎 经典模式
+        </button>
+        <button class="start-btn adventure" @click="startGame('adventure')">
+          ⏱️ 限时冒险
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useGameStore } from '../stores/game'
+import type { GameMode } from '../stores/game'
 
 const gameStore = useGameStore()
 
-function startGame() {
-  gameStore.startGame()
+function startGame(mode: GameMode) {
+  gameStore.startGame(mode)
 }
 </script>
 
@@ -199,6 +224,48 @@ function startGame() {
   color: white;
   font-size: 14px;
   margin: 0;
+}
+
+.adventure-legend {
+  text-align: left;
+  margin-bottom: 25px;
+  background: linear-gradient(135deg, #fef9e7, #eaf2f8);
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.adventure-legend h3 {
+  font-size: 16px;
+  color: #333;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.adventure-hint {
+  font-size: 13px;
+  color: #777;
+  margin: 12px 0 0;
+  text-align: center;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.start-btn.classic {
+  flex: 1;
+}
+
+.start-btn.adventure {
+  flex: 1;
+  background: linear-gradient(135deg, #FF6B35 0%, #F7B733 100%);
+  box-shadow: 0 8px 25px rgba(247, 147, 51, 0.4);
+}
+
+.start-btn.adventure:hover {
+  box-shadow: 0 12px 35px rgba(247, 147, 51, 0.5);
 }
 
 .start-btn {
