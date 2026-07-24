@@ -26,7 +26,8 @@ import { useGameStore } from './stores/game'
 const gameStore = useGameStore()
 
 function handleRestart() {
-  gameStore.startGame()
+  // 再玩一次沿用上一局的模式，startGame 内部会彻底清除上一局状态
+  gameStore.startGame(gameStore.gameMode)
 }
 
 function handleMenu() {

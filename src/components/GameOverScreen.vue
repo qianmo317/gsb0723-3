@@ -2,32 +2,42 @@
   <div class="game-over-screen">
     <div class="game-over-content">
       <h1 class="game-over-title">🎮 游戏结束</h1>
-      
+
       <div class="final-score">
         <span class="score-label">最终得分</span>
-        <span class="score-value">{{ gameStore.score }}</span>
+        <span class="score-value">{{ settlement.score }}</span>
+      </div>
+
+      <div v-if="isAdventure" class="adventure-score">
+        <span class="adv-label">🏆 冒险积分</span>
+        <span class="adv-value">{{ settlement.adventureScore }}</span>
+        <div class="adv-breakdown">
+          <span>奖励分 {{ settlement.bonusScore }}</span>
+          <span>道具 {{ settlement.powerUpsCollected }}×50</span>
+          <span>剩余 {{ Math.floor(settlement.timeRemaining / 1000) }}s×10</span>
+        </div>
       </div>
 
       <div class="stats-grid">
         <div class="stat-item">
           <span class="stat-emoji">🍎</span>
-          <span class="stat-label">接住水果</span>
-          <span class="stat-value">{{ gameStore.itemsCaught }}</span>
+          <span class="stat-label">接住数量</span>
+          <span class="stat-value">{{ settlement.itemsCaught }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-emoji">💣</span>
           <span class="stat-label">被炸弹击中</span>
-          <span class="stat-value">{{ gameStore.bombsHit }}</span>
+          <span class="stat-value">{{ settlement.bombsHit }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-emoji">🔥</span>
           <span class="stat-label">最高连击</span>
-          <span class="stat-value">{{ gameStore.maxCombo }}</span>
+          <span class="stat-value">{{ settlement.maxCombo }}</span>
         </div>
         <div class="stat-item">
-          <span class="stat-emoji">⭐</span>
-          <span class="stat-label">最高关卡</span>
-          <span class="stat-value">{{ gameStore.level }}</span>
+          <span class="stat-emoji">{{ isAdventure ? '🎁' : '⭐' }}</span>
+          <span class="stat-label">{{ isAdventure ? '道具收集' : '最高关卡' }}</span>
+          <span class="stat-value">{{ isAdventure ? settlement.powerUpsCollected : settlement.level }}</span>
         </div>
       </div>
 
@@ -49,7 +59,9 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useGameStore } from '../stores/game'
+import type { AdventureSettlement } from '../stores/game'
 
 const emit = defineEmits<{
   (e: 'restart'): void
@@ -57,6 +69,10 @@ const emit = defineEmits<{
 }>()
 
 const gameStore = useGameStore()
+
+// 结算时立即冻结当前 store 状态快照，保证展示数据与游戏结束瞬间严格一致
+const isAdventure = ref(gameStore.isAdventure)
+const settlement = ref<AdventureSettlement>(gameStore.getAdventureSettlement())
 
 function formatTime(ms: number): string {
   const seconds = Math.floor(ms / 1000)
@@ -133,6 +149,45 @@ function goToMenu() {
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   margin-bottom: 25px;
+}
+
+.adventure-score {
+  background: linear-gradient(135deg, #FF6B35 0%, #F7B733 100%);
+  padding: 20px;
+  border-radius: 16px;
+  margin-bottom: 25px;
+  text-align: center;
+}
+
+.adv-label {
+  display: block;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.95);
+  margin-bottom: 6px;
+}
+
+.adv-value {
+  display: block;
+  font-size: 42px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.adv-breakdown {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.adv-breakdown span {
+  font-size: 12px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 4px 10px;
+  border-radius: 10px;
 }
 
 .stat-item {

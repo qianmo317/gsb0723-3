@@ -21,8 +21,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useGameStore } from '../stores/game'
-import { createRandomItem, getFruitConfig, resetItemCounter } from '../utils/mockData'
-import type { FallingItem } from '../stores/game'
+import {
+  createRandomItem,
+  createAdventureItem,
+  getFruitConfig,
+  isPowerUpType,
+  resetItemCounter
+} from '../utils/mockData'
+import type { FallingItem, PowerUpType } from '../stores/game'
 
 const gameStore = useGameStore()
 
@@ -74,19 +80,29 @@ function handleTouchMove(event: TouchEvent) {
 }
 
 function handleKeyDown(event: KeyboardEvent) {
-  if (!gameStore.isPlaying || gameStore.isPaused) return
+  if (!gameStore.isPlaying) return
+  if (event.key === ' ' || event.key === 'Escape') {
+    // 冒险模式：允许暂停与恢复（配合切出自动暂停，需要可手动恢复）
+    // 经典模式：保持原行为——仅在未暂停时响应，暂停后不通过键盘恢复
+    if (gameStore.isAdventure || !gameStore.isPaused) {
+      gameStore.togglePause()
+    }
+    return
+  }
+  if (gameStore.isPaused) return
   const moveSpeed = 25
   if (event.key === 'ArrowLeft' || event.key === 'a' || event.key === 'A') {
     gameStore.setBasketX(gameStore.basketX - moveSpeed)
   } else if (event.key === 'ArrowRight' || event.key === 'd' || event.key === 'D') {
     gameStore.setBasketX(gameStore.basketX + moveSpeed)
-  } else if (event.key === ' ' || event.key === 'Escape') {
-    gameStore.togglePause()
   }
 }
 
 function spawnItem() {
-  const newItem = createRandomItem(canvasWidth.value, gameStore.baseSpeed)
+  // 冒险模式使用 store 归一化后的刷新概率（bomb+道具+水果=100），经典模式沿用原逻辑
+  const newItem = gameStore.isAdventure
+    ? createAdventureItem(canvasWidth.value, gameStore.baseSpeed, gameStore.spawnProbabilities)
+    : createRandomItem(canvasWidth.value, gameStore.baseSpeed)
   items.value.push(newItem)
 }
 
@@ -237,6 +253,17 @@ function drawPausedOverlay(ctx: CanvasRenderingContext2D) {
   ctx.fillText('按空格键或点击继续', canvasWidth.value / 2, canvasHeight.value / 2 + 30)
 }
 
+// 冒险模式速度效果的画面色调叠层，状态从 store 读取
+function drawEffectOverlay(ctx: CanvasRenderingContext2D) {
+  if (!gameStore.isAdventure || gameStore.activeEffect === 'none') return
+  if (gameStore.activeEffect === 'slow') {
+    ctx.fillStyle = 'rgba(93, 173, 226, 0.18)'
+  } else {
+    ctx.fillStyle = 'rgba(244, 208, 63, 0.15)'
+  }
+  ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+}
+
 function gameLoop(timestamp: number) {
   if (!canvasRef.value || !gameStore.isPlaying) return
 
@@ -247,6 +274,7 @@ function gameLoop(timestamp: number) {
     drawBackground(ctx)
     items.value.forEach(item => drawFallingItem(ctx, item))
     drawBasket(ctx)
+    drawEffectOverlay(ctx)
     drawPausedOverlay(ctx)
     animationId = requestAnimationFrame(gameLoop)
     return
@@ -257,6 +285,16 @@ function gameLoop(timestamp: number) {
 
   gameStore.addGameTime(deltaTime)
 
+  // 冒险模式：推进倒计时与速度效果计时（暂停/切出时不会走到这里，自动停）
+  if (gameStore.isAdventure) {
+    gameStore.tickEffect(deltaTime)
+    gameStore.tickAdventureTimer(deltaTime)
+    // 倒计时归零可能已结束本局，及时收尾
+    if (!gameStore.isPlaying) {
+      return
+    }
+  }
+
   spawnTimer += deltaTime
   if (spawnTimer >= gameStore.spawnRate) {
     spawnItem()
@@ -264,12 +302,18 @@ function gameLoop(timestamp: number) {
   }
 
   items.value = items.value.filter(item => {
-    item.y += item.speed
+    // 冒险模式下水果与炸弹使用不同速度系数（减速全体、闪电仅炸弹加速）
+    const speedFactor = gameStore.isAdventure
+      ? (item.type === 'bomb' ? gameStore.bombSpeedFactor : gameStore.fruitSpeedFactor)
+      : 1
+    item.y += item.speed * speedFactor
     item.rotation += item.rotationSpeed
 
     if (checkCollision(item)) {
       if (item.type === 'bomb') {
         gameStore.loseLife()
+      } else if (isPowerUpType(item.type)) {
+        gameStore.catchPowerUp(item.type as PowerUpType)
       } else {
         const config = getFruitConfig(item.type)
         const score = gameStore.addScore(config.score)
@@ -280,7 +324,8 @@ function gameLoop(timestamp: number) {
     }
 
     if (item.y > canvasHeight.value + 50) {
-      if (item.type !== 'bomb') {
+      // 漏接水果断连击（道具漏接不惩罚），炸弹漏接无影响
+      if (item.type !== 'bomb' && !isPowerUpType(item.type)) {
         gameStore.resetCombo()
       }
       return false
@@ -292,6 +337,7 @@ function gameLoop(timestamp: number) {
   drawBackground(ctx)
   items.value.forEach(item => drawFallingItem(ctx, item))
   drawBasket(ctx)
+  drawEffectOverlay(ctx)
 
   animationId = requestAnimationFrame(gameLoop)
 }
@@ -325,16 +371,34 @@ watch(() => gameStore.isPaused, (paused) => {
   }
 })
 
+// 仅冒险模式：切出标签页或窗口失焦时自动暂停，保证倒计时随之停止
+// 经典模式不介入，保持原有输入与暂停行为不变
+function handleVisibilityChange() {
+  if (document.hidden && gameStore.isAdventure) {
+    gameStore.pauseGame()
+  }
+}
+
+function handleWindowBlur() {
+  if (gameStore.isAdventure) {
+    gameStore.pauseGame()
+  }
+}
+
 onMounted(() => {
   resizeCanvas()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('resize', resizeCanvas)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('blur', handleWindowBlur)
 })
 
 onUnmounted(() => {
   stopGameLoop()
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('resize', resizeCanvas)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('blur', handleWindowBlur)
 })
 </script>
 
