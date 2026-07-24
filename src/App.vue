@@ -2,11 +2,11 @@
   <div class="app">
     <div class="game-container">
       <GameCanvas />
-      
+
       <HUD v-if="gameStore.isPlaying && !gameStore.isGameOver" />
-      
+
       <StartScreen v-if="!gameStore.isPlaying && !gameStore.isGameOver" />
-      
+
       <GameOverScreen
         v-if="gameStore.isGameOver"
         @restart="handleRestart"
@@ -17,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import GameCanvas from './components/GameCanvas.vue'
 import HUD from './components/HUD.vue'
 import StartScreen from './components/StartScreen.vue'
@@ -26,12 +27,29 @@ import { useGameStore } from './stores/game'
 const gameStore = useGameStore()
 
 function handleRestart() {
-  gameStore.startGame()
+  gameStore.startGame(gameStore.gameMode)
 }
 
 function handleMenu() {
   gameStore.isGameOver = false
+  gameStore.isPlaying = false
 }
+
+function handleVisibilityChange() {
+  if (document.hidden) {
+    gameStore.pauseGame()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('blur', handleVisibilityChange)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('blur', handleVisibilityChange)
+})
 </script>
 
 <style scoped>

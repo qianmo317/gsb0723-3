@@ -12,8 +12,8 @@
       <span class="combo-text">连击 x{{ gameStore.combo }}</span>
       <span v-if="gameStore.comboMultiplier > 1" class="combo-multiplier">{{ gameStore.comboMultiplier }}x 加分!</span>
     </div>
-    <div v-if="lastScore > 0" class="score-popup" :style="scorePopupStyle">
-      +{{ lastScore }}
+    <div v-if="lastPopup.text" class="score-popup" :class="lastPopup.kind" :style="scorePopupStyle">
+      {{ lastPopup.text }}
     </div>
   </div>
 </template>
@@ -21,8 +21,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useGameStore } from '../stores/game'
-import { createRandomItem, getFruitConfig, resetItemCounter } from '../utils/mockData'
-import type { FallingItem } from '../stores/game'
+import type { FallingItem, PowerUpType } from '../stores/game'
+import {
+  createRandomItem,
+  getFruitConfig,
+  getItemConfig,
+  isPowerUp,
+  resetItemCounter
+} from '../utils/mockData'
 
 const gameStore = useGameStore()
 
@@ -32,7 +38,7 @@ const canvasWidth = ref(800)
 const canvasHeight = ref(600)
 const items = ref<FallingItem[]>([])
 const showCombo = ref(false)
-const lastScore = ref(0)
+const lastPopup = ref<{ text: string; kind: 'score' | 'good' | 'bad' }>({ text: '', kind: 'score' })
 const scorePopupStyle = ref({ left: '0px', top: '0px' })
 const scorePopupTimeout = ref<number | null>(null)
 
@@ -74,7 +80,12 @@ function handleTouchMove(event: TouchEvent) {
 }
 
 function handleKeyDown(event: KeyboardEvent) {
-  if (!gameStore.isPlaying || gameStore.isPaused) return
+  if (!gameStore.isPlaying || gameStore.isPaused) {
+    if ((event.key === ' ' || event.key === 'Escape') && gameStore.isPlaying && gameStore.isPaused) {
+      gameStore.togglePause()
+    }
+    return
+  }
   const moveSpeed = 25
   if (event.key === 'ArrowLeft' || event.key === 'a' || event.key === 'A') {
     gameStore.setBasketX(gameStore.basketX - moveSpeed)
@@ -86,7 +97,12 @@ function handleKeyDown(event: KeyboardEvent) {
 }
 
 function spawnItem() {
-  const newItem = createRandomItem(canvasWidth.value, gameStore.baseSpeed)
+  const newItem = createRandomItem(canvasWidth.value, gameStore.baseSpeed, {
+    adventure: gameStore.isAdventure,
+    bombProbability: gameStore.bombProbability,
+    powerUpChance: gameStore.powerUpChance,
+    powerUpWeights: gameStore.powerUpWeights
+  })
   items.value.push(newItem)
 }
 
@@ -108,17 +124,19 @@ function checkCollision(item: FallingItem): boolean {
   )
 }
 
-function updateScorePopup(x: number, y: number) {
-  scorePopupStyle.value = {
-    left: `${x}px`,
-    top: `${y}px`
-  }
+function showPopup(text: string, kind: 'score' | 'good' | 'bad', x: number, y: number) {
+  lastPopup.value = { text, kind }
+  scorePopupStyle.value = { left: `${x}px`, top: `${y}px` }
   if (scorePopupTimeout.value) {
     clearTimeout(scorePopupTimeout.value)
   }
   scorePopupTimeout.value = window.setTimeout(() => {
-    lastScore.value = 0
-  }, 600)
+    lastPopup.value = { text: '', kind: 'score' }
+  }, 800)
+}
+
+function currentSpeedMultiplier(item: FallingItem): number {
+  return item.type === 'bomb' ? gameStore.bombSpeedMultiplier : gameStore.fruitSpeedMultiplier
 }
 
 function drawBasket(ctx: CanvasRenderingContext2D) {
@@ -174,10 +192,20 @@ function drawBasket(ctx: CanvasRenderingContext2D) {
 }
 
 function drawFallingItem(ctx: CanvasRenderingContext2D, item: FallingItem) {
-  const config = getFruitConfig(item.type)
+  const config = getItemConfig(item.type)
   ctx.save()
   ctx.translate(item.x, item.y)
   ctx.rotate(item.rotation)
+
+  if (isPowerUp(item.type)) {
+    ctx.beginPath()
+    const glow = ctx.createRadialGradient(0, 0, item.size * 0.2, 0, 0, item.size * 0.9)
+    glow.addColorStop(0, config.color + 'cc')
+    glow.addColorStop(1, config.color + '00')
+    ctx.fillStyle = glow
+    ctx.arc(0, 0, item.size * 0.9, 0, Math.PI * 2)
+    ctx.fill()
+  }
 
   const fontSize = item.size
   ctx.font = `${fontSize}px Arial`
@@ -203,7 +231,7 @@ function drawBackground(ctx: CanvasRenderingContext2D) {
     { x: 550, y: 100, w: 70, h: 35 },
     { x: 680, y: 60, w: 90, h: 45 }
   ]
-  
+
   cloudPositions.forEach(cloud => {
     ctx.beginPath()
     ctx.ellipse(cloud.x, cloud.y, cloud.w / 2, cloud.h / 2, 0, 0, Math.PI * 2)
@@ -220,6 +248,17 @@ function drawBackground(ctx: CanvasRenderingContext2D) {
     ctx.lineTo(i + 5, canvasHeight.value - 30)
     ctx.lineTo(i + 10, canvasHeight.value - 20)
     ctx.fill()
+  }
+}
+
+function drawEffectOverlay(ctx: CanvasRenderingContext2D) {
+  if (!gameStore.isAdventure) return
+  if (gameStore.iceActive) {
+    ctx.fillStyle = 'rgba(79, 195, 247, 0.12)'
+    ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+  } else if (gameStore.lightningActive) {
+    ctx.fillStyle = 'rgba(255, 235, 59, 0.10)'
+    ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
   }
 }
 
@@ -247,6 +286,7 @@ function gameLoop(timestamp: number) {
     drawBackground(ctx)
     items.value.forEach(item => drawFallingItem(ctx, item))
     drawBasket(ctx)
+    drawEffectOverlay(ctx)
     drawPausedOverlay(ctx)
     animationId = requestAnimationFrame(gameLoop)
     return
@@ -264,23 +304,32 @@ function gameLoop(timestamp: number) {
   }
 
   items.value = items.value.filter(item => {
-    item.y += item.speed
+    item.y += item.speed * currentSpeedMultiplier(item)
     item.rotation += item.rotationSpeed
 
     if (checkCollision(item)) {
       if (item.type === 'bomb') {
         gameStore.loseLife()
+        showPopup(gameStore.lightningActive ? '-2❤️' : '-1❤️', 'bad', item.x, item.y)
+      } else if (isPowerUp(item.type)) {
+        gameStore.applyPowerUp(item.type as PowerUpType)
+        const label =
+          item.type === 'goldenChest'
+            ? '+5秒'
+            : item.type === 'iceMushroom'
+              ? '减速!'
+              : '闪电!'
+        showPopup(label, 'good', item.x, item.y)
       } else {
         const config = getFruitConfig(item.type)
         const score = gameStore.addScore(config.score)
-        lastScore.value = score
-        updateScorePopup(item.x, item.y)
+        showPopup(`+${score}`, 'score', item.x, item.y)
       }
       return false
     }
 
     if (item.y > canvasHeight.value + 50) {
-      if (item.type !== 'bomb') {
+      if (item.type !== 'bomb' && !isPowerUp(item.type)) {
         gameStore.resetCombo()
       }
       return false
@@ -292,6 +341,7 @@ function gameLoop(timestamp: number) {
   drawBackground(ctx)
   items.value.forEach(item => drawFallingItem(ctx, item))
   drawBasket(ctx)
+  drawEffectOverlay(ctx)
 
   animationId = requestAnimationFrame(gameLoop)
 }
@@ -384,11 +434,24 @@ canvas {
   position: absolute;
   font-size: 24px;
   font-weight: bold;
-  color: #4CAF50;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
   pointer-events: none;
-  animation: floatUp 0.6s ease-out forwards;
+  animation: floatUp 0.8s ease-out forwards;
   transform: translate(-50%, -50%);
+}
+
+.score-popup.score {
+  color: #4CAF50;
+}
+
+.score-popup.good {
+  color: #FFD700;
+  font-size: 26px;
+}
+
+.score-popup.bad {
+  color: #FF5252;
+  font-size: 26px;
 }
 
 @keyframes floatUp {
@@ -398,7 +461,7 @@ canvas {
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -100%) scale(1.5);
+    transform: translate(-50%, -120%) scale(1.4);
   }
 }
 
