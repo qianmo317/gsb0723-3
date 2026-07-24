@@ -2,11 +2,11 @@
   <div class="app">
     <div class="game-container">
       <GameCanvas />
-      
+
       <HUD v-if="gameStore.isPlaying && !gameStore.isGameOver" />
-      
+
       <StartScreen v-if="!gameStore.isPlaying && !gameStore.isGameOver" />
-      
+
       <GameOverScreen
         v-if="gameStore.isGameOver"
         @restart="handleRestart"
@@ -26,11 +26,11 @@ import { useGameStore } from './stores/game'
 const gameStore = useGameStore()
 
 function handleRestart() {
-  gameStore.startGame()
+  gameStore.startGame(gameStore.gameMode)
 }
 
 function handleMenu() {
-  gameStore.isGameOver = false
+  gameStore.resetAllState()
 }
 </script>
 

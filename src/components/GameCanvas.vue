@@ -7,13 +7,17 @@
       @mousemove="handleMouseMove"
       @touchstart="handleTouchStart"
       @touchmove="handleTouchMove"
+      @click="handleCanvasClick"
     ></canvas>
-    <div v-if="showCombo && gameStore.combo >= 3" class="combo-display">
+    <div v-if="gameStore.combo >= 3" class="combo-display">
       <span class="combo-text">连击 x{{ gameStore.combo }}</span>
       <span v-if="gameStore.comboMultiplier > 1" class="combo-multiplier">{{ gameStore.comboMultiplier }}x 加分!</span>
     </div>
     <div v-if="lastScore > 0" class="score-popup" :style="scorePopupStyle">
       +{{ lastScore }}
+    </div>
+    <div v-if="powerupMessage" class="powerup-popup" :style="powerupPopupStyle" :class="powerupMessageClass">
+      {{ powerupMessage }}
     </div>
   </div>
 </template>
@@ -31,10 +35,13 @@ const wrapperRef = ref<HTMLDivElement | null>(null)
 const canvasWidth = ref(800)
 const canvasHeight = ref(600)
 const items = ref<FallingItem[]>([])
-const showCombo = ref(false)
 const lastScore = ref(0)
 const scorePopupStyle = ref({ left: '0px', top: '0px' })
 const scorePopupTimeout = ref<number | null>(null)
+const powerupMessage = ref('')
+const powerupMessageClass = ref('')
+const powerupPopupStyle = ref({ left: '0px', top: '0px' })
+const powerupPopupTimeout = ref<number | null>(null)
 
 let animationId: number | null = null
 let lastTime = 0
@@ -54,6 +61,7 @@ function resizeCanvas() {
 
 function handleMouseMove(event: MouseEvent) {
   if (!canvasRef.value) return
+  if (!gameStore.isPlaying || gameStore.isPaused) return
   const rect = canvasRef.value.getBoundingClientRect()
   const x = event.clientX - rect.left
   gameStore.setBasketX(x)
@@ -67,26 +75,41 @@ function handleTouchStart(event: TouchEvent) {
 function handleTouchMove(event: TouchEvent) {
   event.preventDefault()
   if (!canvasRef.value || event.touches.length === 0) return
+  if (!gameStore.isPlaying || gameStore.isPaused) return
   const rect = canvasRef.value.getBoundingClientRect()
   const touch = event.touches[0]
   const x = touch.clientX - rect.left
   gameStore.setBasketX(x)
 }
 
+function handleCanvasClick() {
+  if (gameStore.isPaused) {
+    gameStore.resumeGame()
+  }
+}
+
 function handleKeyDown(event: KeyboardEvent) {
-  if (!gameStore.isPlaying || gameStore.isPaused) return
+  if (!gameStore.isPlaying) return
   const moveSpeed = 25
   if (event.key === 'ArrowLeft' || event.key === 'a' || event.key === 'A') {
-    gameStore.setBasketX(gameStore.basketX - moveSpeed)
+    if (!gameStore.isPaused) gameStore.setBasketX(gameStore.basketX - moveSpeed)
   } else if (event.key === 'ArrowRight' || event.key === 'd' || event.key === 'D') {
-    gameStore.setBasketX(gameStore.basketX + moveSpeed)
+    if (!gameStore.isPaused) gameStore.setBasketX(gameStore.basketX + moveSpeed)
   } else if (event.key === ' ' || event.key === 'Escape') {
+    event.preventDefault()
     gameStore.togglePause()
   }
 }
 
+function handleVisibilityChange() {
+  if (document.hidden && gameStore.isPlaying && !gameStore.isPaused) {
+    gameStore.pauseGame()
+  }
+}
+
 function spawnItem() {
-  const newItem = createRandomItem(canvasWidth.value, gameStore.baseSpeed)
+  const probs = gameStore.isAdventureMode ? gameStore.itemSpawnProbabilities : undefined
+  const newItem = createRandomItem(canvasWidth.value, gameStore.baseSpeed, probs)
   items.value.push(newItem)
 }
 
@@ -108,17 +131,53 @@ function checkCollision(item: FallingItem): boolean {
   )
 }
 
-function updateScorePopup(x: number, y: number) {
-  scorePopupStyle.value = {
-    left: `${x}px`,
-    top: `${y}px`
+function showScorePopup(x: number, y: number, score: number) {
+  lastScore.value = score
+  scorePopupStyle.value = { left: `${x}px`, top: `${y}px` }
+  if (scorePopupTimeout.value) clearTimeout(scorePopupTimeout.value)
+  scorePopupTimeout.value = window.setTimeout(() => { lastScore.value = 0 }, 600)
+}
+
+function showPowerupPopup(x: number, y: number, msg: string, cls: string) {
+  powerupMessage.value = msg
+  powerupMessageClass.value = cls
+  powerupPopupStyle.value = { left: `${x}px`, top: `${y - 30}px` }
+  if (powerupPopupTimeout.value) clearTimeout(powerupPopupTimeout.value)
+  powerupPopupTimeout.value = window.setTimeout(() => { powerupMessage.value = '' }, 1000)
+}
+
+function getItemSpeedMultiplier(item: FallingItem): number {
+  if (item.type === 'bomb') return gameStore.bombSpeedMultiplier
+  return gameStore.speedMultiplier
+}
+
+function handleItemCaught(item: FallingItem) {
+  const config = getFruitConfig(item.type)
+
+  switch (item.type) {
+    case 'bomb': {
+      const damage = gameStore.activeSpeedEffect === 'fast' ? 2 : 1
+      gameStore.loseLife(damage)
+      break
+    }
+    case 'goldChest':
+      gameStore.addTimeBonus()
+      showPowerupPopup(item.x, item.y, '+5秒 🎁', 'powerup-gold')
+      break
+    case 'iceMushroom':
+      gameStore.activateSlowEffect()
+      showPowerupPopup(item.x, item.y, '❄️ 减速 8秒', 'powerup-ice')
+      break
+    case 'lightningBanana':
+      gameStore.activateFastEffect()
+      showPowerupPopup(item.x, item.y, '⚡ 双倍积分!', 'powerup-lightning')
+      break
+    default: {
+      const score = gameStore.addScore(config.score)
+      showScorePopup(item.x, item.y, score)
+      break
+    }
   }
-  if (scorePopupTimeout.value) {
-    clearTimeout(scorePopupTimeout.value)
-  }
-  scorePopupTimeout.value = window.setTimeout(() => {
-    lastScore.value = 0
-  }, 600)
 }
 
 function drawBasket(ctx: CanvasRenderingContext2D) {
@@ -179,6 +238,13 @@ function drawFallingItem(ctx: CanvasRenderingContext2D, item: FallingItem) {
   ctx.translate(item.x, item.y)
   ctx.rotate(item.rotation)
 
+  if (item.type === 'goldChest' || item.type === 'iceMushroom' || item.type === 'lightningBanana') {
+    ctx.shadowColor = config.color
+    ctx.shadowBlur = 15
+    const pulse = 1 + Math.sin(Date.now() / 150) * 0.1
+    ctx.scale(pulse, pulse)
+  }
+
   const fontSize = item.size
   ctx.font = `${fontSize}px Arial`
   ctx.textAlign = 'center'
@@ -203,7 +269,7 @@ function drawBackground(ctx: CanvasRenderingContext2D) {
     { x: 550, y: 100, w: 70, h: 35 },
     { x: 680, y: 60, w: 90, h: 45 }
   ]
-  
+
   cloudPositions.forEach(cloud => {
     ctx.beginPath()
     ctx.ellipse(cloud.x, cloud.y, cloud.w / 2, cloud.h / 2, 0, 0, Math.PI * 2)
@@ -220,6 +286,16 @@ function drawBackground(ctx: CanvasRenderingContext2D) {
     ctx.lineTo(i + 5, canvasHeight.value - 30)
     ctx.lineTo(i + 10, canvasHeight.value - 20)
     ctx.fill()
+  }
+}
+
+function drawEffectOverlay(ctx: CanvasRenderingContext2D) {
+  if (gameStore.activeSpeedEffect === 'slow') {
+    ctx.fillStyle = 'rgba(100, 180, 255, 0.1)'
+    ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+  } else if (gameStore.activeSpeedEffect === 'fast') {
+    ctx.fillStyle = 'rgba(255, 220, 50, 0.08)'
+    ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
   }
 }
 
@@ -245,6 +321,7 @@ function gameLoop(timestamp: number) {
 
   if (gameStore.isPaused) {
     drawBackground(ctx)
+    drawEffectOverlay(ctx)
     items.value.forEach(item => drawFallingItem(ctx, item))
     drawBasket(ctx)
     drawPausedOverlay(ctx)
@@ -257,6 +334,11 @@ function gameLoop(timestamp: number) {
 
   gameStore.addGameTime(deltaTime)
 
+  if (gameStore.isAdventureMode) {
+    gameStore.tickCountdown(deltaTime)
+    gameStore.updateEffects(timestamp)
+  }
+
   spawnTimer += deltaTime
   if (spawnTimer >= gameStore.spawnRate) {
     spawnItem()
@@ -264,24 +346,18 @@ function gameLoop(timestamp: number) {
   }
 
   items.value = items.value.filter(item => {
-    item.y += item.speed
+    const spdMult = getItemSpeedMultiplier(item)
+    item.y += item.speed * spdMult
     item.rotation += item.rotationSpeed
 
     if (checkCollision(item)) {
-      if (item.type === 'bomb') {
-        gameStore.loseLife()
-      } else {
-        const config = getFruitConfig(item.type)
-        const score = gameStore.addScore(config.score)
-        lastScore.value = score
-        updateScorePopup(item.x, item.y)
-      }
+      handleItemCaught(item)
       return false
     }
 
     if (item.y > canvasHeight.value + 50) {
-      if (item.type !== 'bomb') {
-        gameStore.resetCombo()
+      if (item.type !== 'bomb' && item.type !== 'goldChest' && item.type !== 'iceMushroom' && item.type !== 'lightningBanana') {
+        gameStore.onFruitMiss()
       }
       return false
     }
@@ -290,6 +366,7 @@ function gameLoop(timestamp: number) {
   })
 
   drawBackground(ctx)
+  drawEffectOverlay(ctx)
   items.value.forEach(item => drawFallingItem(ctx, item))
   drawBasket(ctx)
 
@@ -309,6 +386,7 @@ function stopGameLoop() {
     cancelAnimationFrame(animationId)
     animationId = null
   }
+  items.value = []
 }
 
 watch(() => gameStore.isPlaying, (playing) => {
@@ -329,12 +407,14 @@ onMounted(() => {
   resizeCanvas()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('resize', resizeCanvas)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
   stopGameLoop()
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('resize', resizeCanvas)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -391,6 +471,29 @@ canvas {
   transform: translate(-50%, -50%);
 }
 
+.powerup-popup {
+  position: absolute;
+  font-size: 20px;
+  font-weight: bold;
+  pointer-events: none;
+  animation: powerupFloat 1s ease-out forwards;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.powerup-gold {
+  color: #FFD700;
+}
+
+.powerup-ice {
+  color: #87CEEB;
+}
+
+.powerup-lightning {
+  color: #FFE135;
+}
+
 @keyframes floatUp {
   0% {
     opacity: 1;
@@ -399,6 +502,20 @@ canvas {
   100% {
     opacity: 0;
     transform: translate(-50%, -100%) scale(1.5);
+  }
+}
+
+@keyframes powerupFloat {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -120%) scale(1);
   }
 }
 

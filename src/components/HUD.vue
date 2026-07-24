@@ -2,7 +2,7 @@
   <div class="hud">
     <div class="hud-left">
       <div class="score-display">
-        <span class="label">分数</span>
+        <span class="label">{{ gameStore.isAdventureMode ? '得分' : '分数' }}</span>
         <span class="value">{{ gameStore.score }}</span>
       </div>
       <div v-if="gameStore.combo >= 3" class="combo-badge">
@@ -11,17 +11,35 @@
         <span v-if="gameStore.comboMultiplier > 1" class="multiplier">
           {{ gameStore.comboMultiplier }}x
         </span>
+        <span v-if="gameStore.isScoreDoubled" class="multiplier lightning">
+          ⚡x2
+        </span>
       </div>
     </div>
 
     <div class="hud-center">
-      <div class="level-display">
+      <div v-if="gameStore.isAdventureMode" class="timer-display" :class="{ urgent: gameStore.timeRemainingSeconds <= 10 }">
+        <span class="label">⏱️ 剩余时间</span>
+        <span class="value">{{ formatTime(gameStore.timeRemainingSeconds) }}</span>
+      </div>
+      <div v-else class="level-display">
         <span class="label">关卡</span>
         <span class="value">{{ gameStore.level }}</span>
+      </div>
+
+      <div v-if="slowActive" class="effect-badge effect-ice">
+        ❄️ 减速 {{ Math.ceil(gameStore.slowEffectRemaining / 1000) }}s
+      </div>
+      <div v-if="fastActive" class="effect-badge effect-lightning">
+        ⚡ 狂暴 {{ Math.ceil(gameStore.fastEffectRemaining / 1000) }}s
       </div>
     </div>
 
     <div class="hud-right">
+      <div v-if="gameStore.isAdventureMode" class="level-display">
+        <span class="label">关卡</span>
+        <span class="value">{{ gameStore.level }}</span>
+      </div>
       <div class="lives-display">
         <span class="label">生命</span>
         <div class="hearts">
@@ -40,9 +58,19 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useGameStore } from '../stores/game'
 
 const gameStore = useGameStore()
+
+const slowActive = computed(() => gameStore.activeSpeedEffect === 'slow')
+const fastActive = computed(() => gameStore.activeSpeedEffect === 'fast')
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
 </script>
 
 <style scoped>
@@ -77,11 +105,30 @@ const gameStore = useGameStore()
 
 .score-display,
 .level-display,
-.lives-display {
+.lives-display,
+.timer-display {
   background: rgba(255, 255, 255, 0.9);
   padding: 10px 16px;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.timer-display {
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid #667eea;
+  min-width: 100px;
+  text-align: center;
+}
+
+.timer-display.urgent {
+  background: rgba(255, 80, 80, 0.95);
+  border-color: #ff4444;
+  animation: urgentPulse 0.8s ease-in-out infinite;
+}
+
+.timer-display.urgent .label,
+.timer-display.urgent .value {
+  color: white;
 }
 
 .label {
@@ -98,6 +145,11 @@ const gameStore = useGameStore()
   font-size: 28px;
   font-weight: bold;
   color: #333;
+}
+
+.timer-display .value {
+  font-family: 'Courier New', monospace;
+  font-size: 30px;
 }
 
 .combo-badge {
@@ -132,6 +184,30 @@ const gameStore = useGameStore()
   border-radius: 10px;
 }
 
+.multiplier.lightning {
+  color: #fff;
+  background: rgba(255, 200, 0, 0.6);
+}
+
+.effect-badge {
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: bold;
+  color: white;
+  animation: effectPulse 1s ease-in-out infinite;
+}
+
+.effect-ice {
+  background: linear-gradient(135deg, #4FC3F7, #0288D1);
+  box-shadow: 0 4px 15px rgba(79, 195, 247, 0.5);
+}
+
+.effect-lightning {
+  background: linear-gradient(135deg, #FFD54F, #FF8F00);
+  box-shadow: 0 4px 15px rgba(255, 143, 0, 0.5);
+}
+
 .hearts {
   display: flex;
   gap: 4px;
@@ -156,6 +232,24 @@ const gameStore = useGameStore()
   100% {
     transform: scale(1);
     box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
+  }
+}
+
+@keyframes urgentPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes effectPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
   }
 }
 </style>
