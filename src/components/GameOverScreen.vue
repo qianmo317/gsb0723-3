@@ -1,44 +1,75 @@
 <template>
   <div class="game-over-screen">
     <div class="game-over-content">
-      <h1 class="game-over-title">🎮 游戏结束</h1>
-      
+      <h1 class="game-over-title">
+        {{ settlement.mode === 'adventure' ? '🏁 冒险结算' : '🎮 游戏结束' }}
+      </h1>
+
+      <div v-if="settlement.endedBy === 'time' && settlement.mode === 'adventure'" class="end-badge time">
+        ⏱ 时间到！
+      </div>
+      <div v-else class="end-badge lives">
+        💔 生命耗尽
+      </div>
+
       <div class="final-score">
         <span class="score-label">最终得分</span>
-        <span class="score-value">{{ gameStore.score }}</span>
+        <span class="score-value">{{ settlement.score }}</span>
+      </div>
+
+      <div v-if="settlement.mode === 'adventure'" class="adventure-score-block">
+        <span class="score-label">⚡ 冒险积分</span>
+        <span class="adventure-value">{{ settlement.adventureScore }}</span>
       </div>
 
       <div class="stats-grid">
         <div class="stat-item">
           <span class="stat-emoji">🍎</span>
           <span class="stat-label">接住水果</span>
-          <span class="stat-value">{{ gameStore.itemsCaught }}</span>
+          <span class="stat-value">{{ settlement.itemsCaught }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-emoji">💣</span>
           <span class="stat-label">被炸弹击中</span>
-          <span class="stat-value">{{ gameStore.bombsHit }}</span>
+          <span class="stat-value">{{ settlement.bombsHit }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-emoji">🔥</span>
           <span class="stat-label">最高连击</span>
-          <span class="stat-value">{{ gameStore.maxCombo }}</span>
+          <span class="stat-value">{{ settlement.maxCombo }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-emoji">⭐</span>
           <span class="stat-label">最高关卡</span>
-          <span class="stat-value">{{ gameStore.level }}</span>
+          <span class="stat-value">{{ settlement.level }}</span>
+        </div>
+      </div>
+
+      <div v-if="settlement.mode === 'adventure'" class="powerup-stats">
+        <div class="powerup-stat">
+          <span class="emoji">🎁</span>
+          <span class="num">{{ settlement.chestsCaught }}</span>
+        </div>
+        <div class="powerup-stat">
+          <span class="emoji">🍄</span>
+          <span class="num">{{ settlement.iceCaught }}</span>
+        </div>
+        <div class="powerup-stat">
+          <span class="emoji">🍌</span>
+          <span class="num">{{ settlement.lightningCaught }}</span>
         </div>
       </div>
 
       <div class="time-display">
-        <span class="time-label">游戏时长</span>
-        <span class="time-value">{{ formatTime(gameStore.gameTime) }}</span>
+        <span class="time-label">
+          {{ settlement.mode === 'adventure' ? '坚持时长' : '游戏时长' }}
+        </span>
+        <span class="time-value">{{ formatTime(settlement.durationMs) }}</span>
       </div>
 
       <div class="action-buttons">
         <button class="restart-btn" @click="restartGame">
-          🔄 再玩一次
+          🔄 再来一局
         </button>
         <button class="menu-btn" @click="goToMenu">
           🏠 返回主菜单
@@ -49,6 +80,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useGameStore } from '../stores/game'
 
 const emit = defineEmits<{
@@ -57,6 +89,8 @@ const emit = defineEmits<{
 }>()
 
 const gameStore = useGameStore()
+
+const settlement = computed(() => gameStore.finalSettlement)
 
 function formatTime(ms: number): string {
   const seconds = Math.floor(ms / 1000)
@@ -90,67 +124,104 @@ function goToMenu() {
 
 .game-over-content {
   background: rgba(255, 255, 255, 0.98);
-  padding: 40px;
+  padding: 36px;
   border-radius: 24px;
   text-align: center;
-  max-width: 450px;
+  max-width: 460px;
   width: 90%;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   animation: slideIn 0.5s ease-out;
 }
 
 .game-over-title {
-  font-size: 36px;
+  font-size: 32px;
   font-weight: bold;
   color: #333;
-  margin-bottom: 30px;
+  margin-bottom: 8px;
+}
+
+.end-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 18px;
+}
+
+.end-badge.time {
+  background: linear-gradient(135deg, #4FC3F7, #29B6F6);
+  color: white;
+}
+
+.end-badge.lives {
+  background: linear-gradient(135deg, #FF5252, #D32F2F);
+  color: white;
 }
 
 .final-score {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 25px;
+  padding: 22px;
   border-radius: 16px;
-  margin-bottom: 25px;
+  margin-bottom: 12px;
 }
 
 .score-label {
   display: block;
-  font-size: 16px;
+  font-size: 14px;
   color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .score-value {
   display: block;
-  font-size: 48px;
+  font-size: 44px;
   font-weight: bold;
   color: white;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+.adventure-score-block {
+  background: linear-gradient(135deg, #FF8F00 0%, #FF6F00 100%);
+  padding: 16px;
+  border-radius: 14px;
+  margin-bottom: 18px;
+}
+
+.adventure-score-block .score-label {
+  font-size: 13px;
+}
+
+.adventure-value {
+  display: block;
+  font-size: 32px;
+  font-weight: bold;
+  color: white;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 25px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 15px;
+  padding: 12px;
   background: #f8f9fa;
   border-radius: 12px;
   transition: transform 0.2s;
 }
 
 .stat-item:hover {
-  transform: scale(1.05);
+  transform: scale(1.03);
 }
 
 .stat-emoji {
-  font-size: 28px;
+  font-size: 26px;
   margin-bottom: 4px;
 }
 
@@ -161,28 +232,54 @@ function goToMenu() {
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: bold;
   color: #333;
 }
 
+.powerup-stats {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 12px;
+  background: #FFF8E1;
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+
+.powerup-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.powerup-stat .emoji {
+  font-size: 24px;
+}
+
+.powerup-stat .num {
+  font-size: 18px;
+  font-weight: bold;
+  color: #E65100;
+}
+
 .time-display {
   background: #f0f0f0;
-  padding: 15px;
+  padding: 12px;
   border-radius: 12px;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
 }
 
 .time-label {
   display: block;
-  font-size: 14px;
+  font-size: 13px;
   color: #666;
   margin-bottom: 4px;
 }
 
 .time-value {
   display: block;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: bold;
   color: #333;
   font-family: monospace;
@@ -197,8 +294,8 @@ function goToMenu() {
 .restart-btn,
 .menu-btn {
   border: none;
-  padding: 14px 24px;
-  font-size: 16px;
+  padding: 12px 22px;
+  font-size: 15px;
   font-weight: bold;
   border-radius: 25px;
   cursor: pointer;
